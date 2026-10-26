@@ -182,7 +182,8 @@ legend{font-weight:700; margin-bottom:.4rem; padding:0}
 .quaderno dl{display:grid; grid-template-columns:auto 1fr; gap:.1rem .75rem; margin:.5rem 0 0; font-size:.95rem}
 .quaderno dt{color:var(--tenue)}
 .quaderno dd{margin:0}
-.quaderno .azioni-quaderno{position:relative; z-index:1; margin:.5rem 0 0; display:flex; justify-content:flex-end}
+.quaderno .azioni-quaderno{position:relative; z-index:1; margin:.5rem 0 0; display:flex; flex-wrap:wrap; gap:.25rem; justify-content:flex-end}
+.quaderno .copia-quaderno{padding:.5rem .6rem}
 .quaderno .elimina-quaderno{color:var(--pericolo); padding:.5rem .6rem}
 .segno{display:inline-block; font-size:.85rem; padding:.05rem .5rem; border-radius:4px; background:var(--lavagna-chiara); color:var(--lavagna-scura); font-weight:700; border:1px solid var(--lavagna)}
 
@@ -587,7 +588,7 @@ details.leva-form > summary b{font-size:1.15rem}
 /* =========================================================
    1. COSTANTI E LIBRERIA
    ========================================================= */
-const APP_VERSIONE = '0.8.1';
+const APP_VERSIONE = '0.8.2';
 
 const ESITI = {
   funziona:     { nome:'Ha funzionato', segno:'✓' },
@@ -1798,7 +1799,12 @@ function vistaBenvenuto(){
       <h2>Chi sei</h2>
       <p class="nota">Questi dati restano qui. Nome, sigla e ruolo compariranno ai colleghi del tuo team quando vi scambierete le osservazioni.</p>
       ${moduloProfilo()}
-    </div>`, () => legaProfilo(() => { annuncia('Profilo salvato.'); location.hash = '#/'; }));
+    </div>
+    <div class="foglio">
+      <h2 style="margin-top:0">Arrivi da un altro dispositivo?</h2>
+      <p>Se hai fatto una copia di sicurezza, ripristinala: tornano il profilo, i fascicoli e le impostazioni. Non serve compilare «Chi sei».</p>
+      ${campoRipristino('ripristina-benvenuto')}
+    </div>`, () => { legaProfilo(() => { annuncia('Profilo salvato.'); location.hash = '#/'; }); legaRipristino('ripristina-benvenuto'); });
 }
 
 /* ---------- 7.2 Home: i tuoi fascicoli ---------- */
@@ -1820,7 +1826,7 @@ async function vistaHome(){
           <dt>Episodi</dt><dd>${episodi}</dd>
         </dl>
         ${io && io.referente ? '<p style="margin:.6rem 0 0"><span class="segno">Sei il referente</span></p>' : ''}
-        <p class="azioni-quaderno"><button type="button" class="testuale elimina-quaderno" data-elimina="${esc(f.id)}" aria-label="Elimina il fascicolo ${esc(f.pseudonimo)}">Elimina</button></p>
+        <p class="azioni-quaderno"><button type="button" class="testuale copia-quaderno" data-copia="${esc(f.id)}" aria-label="Scarica la copia di sicurezza del fascicolo ${esc(f.pseudonimo)}">Copia di sicurezza</button><button type="button" class="testuale elimina-quaderno" data-elimina="${esc(f.id)}" aria-label="Elimina il fascicolo ${esc(f.pseudonimo)}">Elimina</button></p>
       </li>`);
   }
   mostra(`
@@ -1840,6 +1846,7 @@ async function vistaHome(){
   `, () => {
     $('#importa-home').addEventListener('change', e => { const file = e.target.files[0]; e.target.value = ''; if (file) importaPacchetto(file); });
     $$('[data-elimina]').forEach(b => b.addEventListener('click', async () => { if (await chiediEliminaFascicolo(b.dataset.elimina)) vistaHome(); }));
+    $$('[data-copia]').forEach(b => b.addEventListener('click', () => esportaCopia(b.dataset.copia)));
   });
 }
 
@@ -3809,21 +3816,22 @@ async function aggiungiRegistro(fid, testo){
 }
 
 /* ---------- dialoghi ---------- */
-function chiediParola({titolo, testo, nuova = false, ricorda = true}){
+function chiediParola({titolo, testo, nuova = false, ricorda = true, etichetta = 'Parola chiave del team', conRicorda = true, extra = ''}){
   return new Promise(risolvi => {
     const d = $('#dialogo');
     d.innerHTML = `
       <h2 id="dialogo-titolo" style="margin-top:0">${esc(titolo)}</h2>
       <p>${testo}</p>
       <form id="form-parola" novalidate>
-        <div class="campo"><label for="parola-1">Parola chiave del team</label>
+        <div class="campo"><label for="parola-1">${esc(etichetta)}</label>
           ${nuova ? '<span class="aiuto" id="parola-aiuto">Almeno 10 caratteri. Una frase breve è facile da ricordare e difficile da indovinare, per esempio «lavagna verde il martedì».</span>' : ''}
           <input type="password" id="parola-1" autocomplete="off" ${nuova ? 'aria-describedby="parola-aiuto"' : ''}></div>
         ${nuova ? `<div class="campo"><label for="parola-2">Riscrivila per conferma</label>
           <input type="password" id="parola-2" autocomplete="off"></div>` : ''}
         <label class="riga-check"><input type="checkbox" id="parola-mostra"> Mostra la parola chiave</label>
-        <label class="riga-check"><input type="checkbox" id="parola-ricorda" ${ricorda ? 'checked' : ''} aria-describedby="parola-ricorda-aiuto"> Ricordala su questo dispositivo</label>
-        <p class="nota" id="parola-ricorda-aiuto">Se il dispositivo è condiviso, per esempio il computer della sala docenti, togli la spunta: la parola chiave ti verrà chiesta a ogni scambio.</p>
+        ${conRicorda ? `<label class="riga-check"><input type="checkbox" id="parola-ricorda" ${ricorda ? 'checked' : ''} aria-describedby="parola-ricorda-aiuto"> Ricordala su questo dispositivo</label>
+        <p class="nota" id="parola-ricorda-aiuto">Se il dispositivo è condiviso, per esempio il computer della sala docenti, togli la spunta: la parola chiave ti verrà chiesta a ogni scambio.</p>` : ''}
+        ${extra}
         <p class="errore" id="parola-errore" role="alert" hidden></p>
         <div class="azioni">
           <button type="submit">Continua</button>
@@ -3843,7 +3851,8 @@ function chiediParola({titolo, testo, nuova = false, ricorda = true}){
         if (p1.length < 10){ err.textContent = 'La parola chiave deve avere almeno 10 caratteri.'; err.hidden = false; return; }
         if (p1 !== p2){ err.textContent = 'Le due parole chiave non coincidono.'; err.hidden = false; return; }
       } else if (!p1){ err.textContent = 'Scrivi la parola chiave.'; err.hidden = false; return; }
-      chiudi({parola:p1, ricorda:$('#parola-ricorda', d).checked});
+      const r = $('#parola-ricorda', d), nomi = $('#copia-nomi', d);
+      chiudi({parola:p1, ricorda:!!(r && r.checked), nomi:!!(nomi && nomi.checked)});
     };
     d.showModal(); $('#parola-1', d).focus();
   });
@@ -3996,8 +4005,8 @@ async function importaPacchetto(file){
   const note = [...new Set((await Archivio.tutti('locale')).map(l => l.parola).filter(Boolean))];
   for (const p of note){ try { contenuto = await decifra(involucro, p); parolaUsata = p; break; } catch(e){} }
   while (!contenuto){
-    const r = await chiediParola({ titolo:'Parola chiave del team',
-      testo:`Per aprire <b>${esc(file.name)}</b> serve la parola chiave che il team ha concordato.` });
+    const r = await chiediParola({ titolo:'Parola chiave', etichetta:'Parola chiave',
+      testo:`Per aprire <b>${esc(file.name)}</b> serve la parola chiave che il team ha concordato. Se è una tua copia di sicurezza, scrivi quella che hai scelto quando l'hai fatta.` });
     if (!r) return;
     annuncia('Apro il pacchetto…');
     try { contenuto = await decifra(involucro, r.parola); parolaUsata = r.parola; ricorda = r.ricorda; }
@@ -4005,6 +4014,10 @@ async function importaPacchetto(file){
   }
 
   const c = contenuto;
+  if (c && c.tipo === TIPO_COPIA) return ripristinaCopia(c);
+  if (!S.profilo){
+    return avvisa('Prima scrivi chi sei', 'Questo è un pacchetto di scambio del team, non una copia di sicurezza. Compila prima «Chi sei» e poi importalo dalla pagina dei fascicoli.');
+  }
   if (!c || !c.fascicolo || c.fascicolo.id !== c.fascicoloId || !Array.isArray(c.eventi) || !TIPI_PACCHETTO[c.tipo]){
     return avvisa('Pacchetto non valido', 'Il contenuto del pacchetto è incompleto o danneggiato. Chiedi a chi te l\'ha mandato di prepararlo di nuovo.');
   }
@@ -4092,6 +4105,12 @@ function sezScambi(dati){
         </div>
       </div>` : ''}
       <div class="foglio">
+        <h2 style="margin-top:0">Copia di sicurezza di questo fascicolo</h2>
+        <p>Un file cifrato con una tua parola chiave: tutte le osservazioni che hai qui, la configurazione e la parola chiave del team. Serve a te, per non perdere niente o per passare a un altro dispositivo. Non mandarla al team.</p>
+        <p class="nota">${dataCopia(f.id)}</p>
+        <div class="azioni"><button type="button" class="secondario" id="esp-copia">Scarica la copia di sicurezza</button></div>
+      </div>
+      <div class="foglio">
         <h2 style="margin-top:0">Importa un pacchetto</h2>
         <p class="nota">Contributi dei colleghi, sintesi del referente o pacchetti di avvio. Importare due volte lo stesso file non crea doppioni.</p>
         <input type="file" id="importa-fascicolo" class="file-nascosto">
@@ -4124,6 +4143,7 @@ function sezScambi(dati){
     lega(){
       $('#esp-contributo').addEventListener('click', () => esportaPacchetto(f.id, 'contributo'));
       $('#esp-tutto').addEventListener('click', () => esportaPacchetto(f.id, 'contributo', {tuttiIMiei:true}));
+      $('#esp-copia').addEventListener('click', () => esportaCopia(f.id));
       if (referente){
         $('#esp-avvio').addEventListener('click', () => esportaPacchetto(f.id, 'avvio'));
         $('#esp-sintesi').addEventListener('click', () => esportaPacchetto(f.id, 'sintesi'));
@@ -4184,6 +4204,159 @@ async function chiediRicominciaFascicolo(fid){
   return true;
 }
 
+/* ---------- 7.4i Copia di sicurezza ----------
+   Un file cifrato con una parola chiave personale, solo per sé: tutti i fascicoli
+   (o uno) con eventi, dati locali e bozza, più profilo e impostazioni.
+   Il ripristino aggiunge ciò che manca e non cancella niente. */
+const TIPO_COPIA = 'copia';
+
+let COPIE = null; // date delle ultime copie, lette all'avvio
+function dataCopia(fid){
+  const c = COPIE || {};
+  const q = fid ? (c.fascicoli || {})[fid] : c.tutto;
+  if (q) return `Ultima copia${fid ? ' di questo fascicolo' : ' di tutto'}: ${esc(dataOra(q))}.`;
+  return fid ? 'Non hai ancora fatto una copia di questo fascicolo su questo dispositivo.' : 'Non hai ancora fatto una copia di tutto su questo dispositivo.';
+}
+
+function campoRipristino(id){
+  return `<input type="file" id="${id}" class="file-nascosto">
+    <label for="${id}" class="bottone secondario">Ripristina da una copia</label>`;
+}
+function legaRipristino(id){
+  $('#' + id).addEventListener('change', e => { const file = e.target.files[0]; e.target.value = ''; if (file) importaPacchetto(file); });
+}
+
+async function esportaCopia(fid){
+  if (!scambioPossibile()) return;
+  const ids = fid ? [fid] : (await Archivio.tutti('fascicoli')).map(f => f.id);
+  const fascicoli = [];
+  for (const id of ids){
+    const f = await Archivio.leggi('fascicoli', id); if (!f) continue;
+    fascicoli.push({ fascicolo:f, eventi:await Archivio.eventiDi(id),
+      locale:(await Archivio.leggi('locale', id)) || null,
+      bozza:(await Archivio.leggi('meta', `bozza-episodio:${id}`)) || null });
+  }
+  const conNomi = fascicoli.some(x => x.locale && x.locale.nomeReale);
+  const r = await chiediParola({
+    titolo: fid ? `Copia di sicurezza di ${fascicoli[0] ? fascicoli[0].fascicolo.pseudonimo : 'questo fascicolo'}` : 'Copia di sicurezza di tutto',
+    etichetta:'Parola chiave della copia', nuova:true, conRicorda:false,
+    testo:'Scegli una parola chiave tutta tua: senza di lei la copia non si apre, nemmeno per te. Scrivila in un posto sicuro, lontano dal file.',
+    extra: conNomi ? `<label class="riga-check"><input type="checkbox" id="copia-nomi" aria-describedby="copia-nomi-aiuto"> Includi il nome reale ${fascicoli.length === 1 ? 'dell\'alunno' : 'degli alunni'}</label>
+      <p class="nota" id="copia-nomi-aiuto">Mettilo solo se la copia resta tua. Senza spunta, nella copia c'è solo lo pseudonimo e il nome lo riscrivi dopo il ripristino.</p>` : ''
+  });
+  if (!r) return;
+  if (!r.nomi) fascicoli.forEach(x => { if (x.locale) x.locale = Object.assign({}, x.locale, {nomeReale:''}); });
+
+  const contenuto = { tipo:TIPO_COPIA, completa:!fid, creato:adesso(), app:APP_VERSIONE,
+    profilo:S.profilo, impostazioni:S.impostazioni, fascicoli };
+  annuncia('Preparo la copia cifrata…');
+  const involucro = await cifra(contenuto, r.parola);
+  const oggi = new Date().toISOString().slice(0,10);
+  const nomeFile = (fid && fascicoli[0] ? `${fascicoli[0].fascicolo.pseudonimo}_copia-di-sicurezza_${oggi}` : `cosa-mi-aiuta_copia-di-tutto_${oggi}`)
+    .replace(/[^\p{L}\p{N}._-]+/gu, '-') + ESTENSIONE;
+  const file = new File([JSON.stringify(involucro)], nomeFile, {type:'application/json'});
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a'); a.href = url; a.download = nomeFile;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+  COPIE = Object.assign({fascicoli:{}}, COPIE || {});
+  const quando = adesso();
+  if (!fid) COPIE.tutto = quando;
+  fascicoli.forEach(x => COPIE.fascicoli[x.fascicolo.id] = quando);
+  await Archivio.scrivi('meta', COPIE, 'copie');
+  for (const x of fascicoli) await aggiungiRegistro(x.fascicolo.id, `Fatta una copia di sicurezza (${fid ? 'di questo fascicolo' : 'di tutto'}), file ${nomeFile}.`);
+
+  const eventi = fascicoli.reduce((n, x) => n + x.eventi.length, 0);
+  const puoCondividere = navigator.canShare && navigator.canShare({files:[file]});
+  const d = $('#dialogo');
+  d.innerHTML = `
+    <h2 id="dialogo-titolo" style="margin-top:0">La copia di sicurezza è pronta</h2>
+    <p>Il file <b>${esc(nomeFile)}</b> è stato scaricato. Contiene ${fid ? 'il fascicolo' : plurale(fascicoli.length, 'fascicolo', 'fascicoli')} con ${plurale(eventi, 'evento', 'eventi')}${fid ? '' : ', il tuo profilo e le impostazioni'}${r.nomi ? ', con il nome reale' : ', senza il nome reale'}.</p>
+    <p>Spostalo dalla cartella dei download in un posto sicuro: una chiavetta o il tuo spazio di lavoro d'istituto. Per ritrovare tutto su un altro dispositivo, apri lì l'app e scegli «Ripristina da una copia».</p>
+    <div class="azioni">
+      ${puoCondividere ? '<button type="button" class="secondario" id="condividi">Salva con un\'app</button>' : ''}
+      <button type="button" id="chiudi-pronto">Chiudi</button>
+    </div>`;
+  d.oncancel = null;
+  $('#chiudi-pronto', d).onclick = () => { d.close(); router(); };
+  if (puoCondividere) $('#condividi', d).onclick = async () => {
+    try { await navigator.share({files:[file], title:nomeFile}); } catch(e){}
+  };
+  d.showModal(); $('#chiudi-pronto', d).focus();
+}
+
+async function ripristinaCopia(c){
+  if (!Array.isArray(c.fascicoli)){
+    return avvisa('Copia non valida', 'Il contenuto della copia è incompleto o danneggiato. Se ne hai un\'altra, prova con quella.');
+  }
+  const voci = [];
+  for (const x of c.fascicoli){
+    const f = x && x.fascicolo;
+    if (!f || typeof f.id !== 'string' || typeof f.pseudonimo !== 'string') continue;
+    const esiste = !!(await Archivio.leggi('fascicoli', f.id));
+    const u = analizzaUnione(Array.isArray(x.eventi) ? x.eventi : [], esiste ? await Archivio.eventiDi(f.id) : [], f.id);
+    voci.push({x, f, esiste, u});
+  }
+  const profiloNuovo = !S.profilo && c.profilo && typeof c.profilo.id === 'string' && c.profilo.nome;
+  if (!S.profilo && !profiloNuovo){
+    return avvisa('Prima scrivi chi sei', 'In questa copia non c\'è il profilo. Compila «Chi sei» e poi ripristina la copia da Impostazioni.');
+  }
+  const righe = voci.map(v => `<li><b>${esc(v.f.pseudonimo)}</b>: ${v.esiste ? 'già su questo dispositivo' : 'nuovo su questo dispositivo'}, ${
+    v.u.accettati.length ? plurale(v.u.accettati.length, 'evento da aggiungere', 'eventi da aggiungere') : 'niente da aggiungere'}${
+    v.u.scartati ? `, ${plurale(v.u.scartati, 'scartato', 'scartati')}` : ''}</li>`).join('');
+  const ok = await conferma({
+    titolo:'Ripristinare la copia di sicurezza?',
+    testo:`Copia ${c.completa ? 'di tutto' : 'di un fascicolo'} del ${esc(dataOra(c.creato))}${c.profilo ? `, di ${esc(c.profilo.nome)} (${esc(c.profilo.sigla || '?')})` : ''}.
+      ${voci.length ? `<ul>${righe}</ul>` : '<br>Nella copia non ci sono fascicoli.'}
+      ${profiloNuovo ? 'Torneranno anche il tuo profilo e le impostazioni.' : 'Le parole del team della copia si aggiungono alle tue.'} Non viene cancellato niente.`,
+    ok:'Ripristina'
+  });
+  if (!ok) return;
+
+  if (profiloNuovo){
+    S.profilo = c.profilo;
+    await Archivio.scrivi('meta', S.profilo, 'profilo');
+    if (c.impostazioni && typeof c.impostazioni === 'object'){
+      S.impostazioni = Object.assign({}, IMPOSTAZIONI_BASE, c.impostazioni);
+      applicaImpostazioni();
+    }
+  } else if (c.impostazioni && Array.isArray(c.impostazioni.parolePersonali)){
+    const pers = Array.isArray(S.impostazioni.parolePersonali) ? S.impostazioni.parolePersonali.slice() : [];
+    const note = new Set(pers.map(p => String(p.testo || '').toLowerCase()));
+    c.impostazioni.parolePersonali.forEach(p => {
+      if (p && p.testo && !note.has(String(p.testo).toLowerCase())){ pers.push(p); note.add(String(p.testo).toLowerCase()); }
+    });
+    S.impostazioni.parolePersonali = pers;
+  }
+  await salvaImpostazioni();
+
+  for (const {x, f, esiste, u} of voci){
+    const loc = (x.locale && x.locale.fascicoloId === f.id) ? x.locale : null;
+    if (!esiste) await Archivio.scrivi('fascicoli', f);
+    for (const e of u.accettati) await Archivio.scrivi('eventi', e);
+    const attuale = await Archivio.leggi('locale', f.id);
+    let l;
+    if (!attuale){
+      l = Object.assign({fascicoloId:f.id, nomeReale:'', mioMembroId:S.profilo.id, inviate:[], registro:[], parola:''}, loc || {});
+    } else {
+      l = Object.assign({inviate:[], registro:[]}, attuale);
+      if (loc){
+        if (!l.nomeReale && loc.nomeReale) l.nomeReale = loc.nomeReale;
+        if (!l.parola && loc.parola) l.parola = loc.parola;
+        l.inviate = [...new Set([...(l.inviate || []), ...(loc.inviate || [])])];
+      }
+    }
+    await Archivio.scrivi('locale', l);
+    const chiaveBozza = `bozza-episodio:${f.id}`;
+    if (x.bozza && !(await Archivio.leggi('meta', chiaveBozza))) await Archivio.scrivi('meta', x.bozza, chiaveBozza);
+    await aggiungiRegistro(f.id, `Ripristinato dalla copia di sicurezza del ${dataOra(c.creato)}: ${plurale(u.accettati.length, 'evento aggiunto', 'eventi aggiunti')}.`);
+  }
+  const aggiunti = voci.reduce((n, v) => n + v.u.accettati.length, 0);
+  annuncia(`Copia ripristinata: ${plurale(voci.length, 'fascicolo', 'fascicoli')}, ${plurale(aggiunti, 'evento aggiunto', 'eventi aggiunti')}.`);
+  if (location.hash === '#/' || location.hash === '') router(); else location.hash = '#/';
+}
+
 /* ---------- 7.5 Impostazioni ---------- */
 async function vistaImpostazioni(){
   const i = S.impostazioni;
@@ -4223,8 +4396,20 @@ async function vistaImpostazioni(){
       <h2 style="margin-top:0">Dove sono i dati</h2>
       <p>${esc(stato)}</p>
       ${suIOS && !comeApp() ? '<p class="attenzione"><b>Su iPhone e iPad</b> aggiungi l\'app alla schermata Home (in Safari: Condividi, poi «Aggiungi alla schermata Home») e aprila da lì. Safari può cancellare i dati dei siti che non apri per sette giorni; dalla schermata Home questo non succede.</p>' : ''}
-      <p class="nota">Se cancelli i dati di navigazione del browser, cancelli anche le osservazioni. Gli scambi regolari con il team fanno anche da copia di sicurezza: il referente ha sempre il diario completo.</p>
+      <p class="nota">Se cancelli i dati di navigazione del browser, cancelli anche le osservazioni. Gli scambi regolari con il team aiutano, perché il referente ha il diario completo; ma per ritrovare tutto, anche il nome dell'alunno e le tue impostazioni, fai ogni tanto una copia di sicurezza.</p>
+    </div>
+    <div class="foglio">
+      <h2 style="margin-top:0">Copia di sicurezza</h2>
+      <p>Scarica in un solo file cifrato tutti i tuoi fascicoli, il profilo, le impostazioni e le parole del team. Serve per non perdere niente e per passare a un altro dispositivo o browser: lì apri l'app e scegli «Ripristina da una copia».</p>
+      <p class="nota">${dataCopia()}</p>
+      <div class="azioni">
+        <button type="button" id="copia-tutto">Scarica la copia di tutto</button>
+        ${campoRipristino('ripristina-impostazioni')}
+      </div>
+      <p class="nota">La copia è solo tua: conservala su una chiavetta o nel tuo spazio di lavoro d'istituto e non mandarla al team. Per gli scambi con i colleghi usa i pacchetti in Condividere. Ripristinare una copia non cancella niente: aggiunge solo ciò che manca.</p>
     </div>`, () => {
+      $('#copia-tutto').addEventListener('click', () => esportaCopia());
+      legaRipristino('ripristina-impostazioni');
       $('#form-a11y').addEventListener('change', async e => {
         const t = e.target; if (t.type !== 'radio') return;
         i[t.name] = t.name === 'scala' ? Number(t.value) : t.value;
@@ -4571,6 +4756,7 @@ const comeApp = () => navigator.standalone === true || (window.matchMedia && mat
   }
   S.profilo = await Archivio.leggi('meta', 'profilo') || null;
   S.impostazioni = Object.assign({}, IMPOSTAZIONI_BASE, await Archivio.leggi('meta', 'impostazioni') || {});
+  COPIE = await Archivio.leggi('meta', 'copie') || null;
   applicaImpostazioni();
   window.addEventListener('hashchange', router);
   router();
